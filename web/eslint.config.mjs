@@ -10,6 +10,10 @@ export default defineConfig([
     plugins: { "no-comments": noComments },
     rules: { "no-comments/disallowComments": "error" },
   },
+  {
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
   globalIgnores([
     ".next/**",
     "out/**",
