@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     cors_origins: str
     database_url: str = ""
     test_database_url: str = ""
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
 
 
 settings = Settings()

@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Decide Action */
+        patch: operations["decide_action_api_actions__action_id__patch"];
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -93,6 +110,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIAnalysis */
+        AIAnalysis: {
+            /** Headline */
+            headline: string;
+            /** Summary */
+            summary: string;
+            /** Possible Significance */
+            possible_significance: string[];
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+        };
+        /** AuditEntryView */
+        AuditEntryView: {
+            /** Id */
+            id: number;
+            /** Action Id */
+            action_id: number;
+            /** Action Title */
+            action_title: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approved" | "rejected";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ChangeDetail */
         ChangeDetail: {
             /** Id */
@@ -132,6 +182,11 @@ export interface components {
             structured_diff: components["schemas"]["FieldChange"][];
             before: components["schemas"]["SnapshotEvidence"];
             after: components["schemas"]["SnapshotEvidence"];
+            ai_analysis: components["schemas"]["AIAnalysis"] | null;
+            /** Actions */
+            actions: components["schemas"]["FollowUpActionView"][];
+            /** Audit Timeline */
+            audit_timeline: components["schemas"]["AuditEntryView"][];
         };
         /** ChangeSummary */
         ChangeSummary: {
@@ -169,6 +224,14 @@ export interface components {
              */
             created_at: string;
         };
+        /** DecisionRequest */
+        DecisionRequest: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "approved" | "rejected";
+        };
         /** FieldChange */
         FieldChange: {
             /** Field */
@@ -177,6 +240,23 @@ export interface components {
             before: unknown;
             /** After */
             after: unknown;
+        };
+        /** FollowUpActionView */
+        FollowUpActionView: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "approved" | "rejected";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -460,6 +540,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChangeDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    decide_action_api_actions__action_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowUpActionView"];
                 };
             };
             /** @description Not Found */

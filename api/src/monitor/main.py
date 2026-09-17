@@ -19,7 +19,7 @@ app = FastAPI(title="Clinical Trial Monitoring API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
 )
 app.include_router(router)
 

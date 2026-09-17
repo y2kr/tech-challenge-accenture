@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from openai import OpenAI, OpenAIError
+from pydantic import BaseModel, Field
 from sqlalchemy import Engine, case, create_engine, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -15,9 +16,18 @@ from sqlalchemy.orm import Session
 from monitor.changes import FieldChange, Severity, Snapshot, normalise_snapshot
 from monitor.clinicaltrials import fetch_lead_sponsor_studies
 from monitor.settings import settings
-from monitor.storage import ChangeEvent, StoredStudy, StudySnapshot, persist_snapshot
+from monitor.storage import (
+    AuditEntry,
+    ChangeEvent,
+    FollowUpAction,
+    StoredStudy,
+    StudySnapshot,
+    persist_snapshot,
+)
 
 Source = Literal["live", "replay"]
+ActionStatus = Literal["proposed", "approved", "rejected"]
+Decision = Literal["approved", "rejected"]
 REPLAY_LABEL = "Synthetic replay: recruiting to terminated; not live registry history"
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -55,6 +65,32 @@ class SyncResult(BaseModel):
     retrieved_at: datetime
 
 
+class AIAnalysis(BaseModel):
+    headline: str = Field(min_length=1, max_length=120)
+    summary: str = Field(min_length=1, max_length=500)
+    possible_significance: list[str] = Field(min_length=1, max_length=3)
+    confidence: Literal["low", "medium", "high"]
+
+
+class FollowUpActionView(BaseModel):
+    id: int
+    title: str
+    status: ActionStatus
+    created_at: datetime
+
+
+class AuditEntryView(BaseModel):
+    id: int
+    action_id: int
+    action_title: str
+    decision: Decision
+    created_at: datetime
+
+
+class DecisionRequest(BaseModel):
+    status: Decision
+
+
 class ChangeSummary(BaseModel):
     id: int
     nct_id: str
@@ -81,10 +117,41 @@ class ChangeDetail(ChangeSummary):
     structured_diff: list[FieldChange]
     before: SnapshotEvidence
     after: SnapshotEvidence
+    ai_analysis: AIAnalysis | None
+    actions: list[FollowUpActionView]
+    audit_timeline: list[AuditEntryView]
 
 
 def _label(source: Source) -> str:
     return REPLAY_LABEL if source == "replay" else "Live ClinicalTrials.gov observation"
+
+
+def _generate_ai_analysis(changes: list[FieldChange]) -> AIAnalysis | None:
+    if not settings.openai_api_key:
+        return None
+    evidence = [change.model_dump(mode="json") for change in changes]
+    completion = OpenAI(
+        api_key=settings.openai_api_key, timeout=10
+    ).chat.completions.parse(
+        model=settings.openai_model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Explain only the supplied before/after evidence for a clinical-trial "
+                    "analyst. Do not add facts, causal claims, medical conclusions, "
+                    "predictions, or company assertions. State uncertainty and use "
+                    "qualified language for possible significance."
+                ),
+            },
+            {"role": "user", "content": json.dumps({"evidence": evidence})},
+        ],
+        response_format=AIAnalysis,
+    )
+    analysis = completion.choices[0].message.parsed
+    if analysis is None:
+        raise ValueError("model returned no structured explanation")
+    return analysis
 
 
 def _save(
@@ -109,6 +176,40 @@ def _save(
             )
             if event is not None:
                 event_ids.append(event.id)
+    analysis_event_ids = event_ids
+    if settings.openai_api_key:
+        with Session(engine) as session:
+            pending = session.scalars(
+                select(ChangeEvent.id)
+                .join(StoredStudy, ChangeEvent.study_id == StoredStudy.id)
+                .where(
+                    StoredStudy.source == source,
+                    ChangeEvent.ai_analysis.is_(None),
+                )
+                .order_by(ChangeEvent.created_at.desc())
+                .limit(10)
+            ).all()
+        analysis_event_ids = list(dict.fromkeys([*event_ids, *pending]))
+    for event_id in analysis_event_ids:
+        try:
+            with Session(engine) as session:
+                event = session.get(ChangeEvent, event_id)
+                if event is None:
+                    continue
+                changes = [
+                    FieldChange.model_validate(change)
+                    for change in event.structured_diff
+                ]
+            analysis = _generate_ai_analysis(changes)
+            if analysis is not None:
+                with Session(engine) as session, session.begin():
+                    event = session.get(ChangeEvent, event_id)
+                    if event is not None:
+                        event.ai_analysis = analysis.model_dump(mode="json")
+        except (OpenAIError, KeyError, IndexError, TypeError, ValueError) as error:
+            logger.warning(
+                "AI explanation unavailable for event %s: %s", event_id, error
+            )
     return event_ids
 
 
@@ -232,9 +333,78 @@ def change_detail(
             )
             for snapshot in snapshots
         ]
+        stored_actions = session.scalars(
+            select(FollowUpAction)
+            .where(FollowUpAction.change_event_id == event.id)
+            .order_by(FollowUpAction.id)
+        ).all()
+        action_titles = {action.id: action.title for action in stored_actions}
+        audit_entries = session.scalars(
+            select(AuditEntry)
+            .where(AuditEntry.change_event_id == event.id)
+            .order_by(AuditEntry.created_at, AuditEntry.id)
+        ).all()
         return ChangeDetail(
             **_summary(event, study).model_dump(),
             structured_diff=event.structured_diff,
             before=evidence[0],
             after=evidence[1],
+            ai_analysis=event.ai_analysis,
+            actions=[
+                FollowUpActionView(
+                    id=action.id,
+                    title=action.title,
+                    status=action.status,
+                    created_at=action.created_at,
+                )
+                for action in stored_actions
+            ],
+            audit_timeline=[
+                AuditEntryView(
+                    id=entry.id,
+                    action_id=entry.action_id,
+                    action_title=action_titles[entry.action_id],
+                    decision=entry.decision,
+                    created_at=entry.created_at,
+                )
+                for entry in audit_entries
+            ],
+        )
+
+
+@router.patch(
+    "/actions/{action_id}",
+    responses={404: {"model": Problem}, 503: {"model": Problem}},
+)
+def decide_action(
+    engine: Database,
+    action_id: Annotated[int, Path(gt=0)],
+    decision: DecisionRequest,
+) -> FollowUpActionView:
+    with Session(engine) as session, session.begin():
+        action = session.scalar(
+            select(FollowUpAction)
+            .where(FollowUpAction.id == action_id)
+            .with_for_update()
+        )
+        if action is None:
+            raise HTTPException(404, "Follow-up action not found.")
+        action.status = decision.status
+        event = session.get(ChangeEvent, action.change_event_id)
+        if event is None:
+            raise HTTPException(404, "Change event not found.")
+        event.review_status = decision.status
+        session.add(
+            AuditEntry(
+                change_event_id=event.id,
+                action_id=action.id,
+                decision=decision.status,
+            )
+        )
+        session.flush()
+        return FollowUpActionView(
+            id=action.id,
+            title=action.title,
+            status=action.status,
+            created_at=action.created_at,
         )

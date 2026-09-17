@@ -92,11 +92,52 @@ class ChangeEvent(Base):
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)
     structured_diff: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    ai_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     review_status: Mapped[str] = mapped_column(
         String(32), server_default="unreviewed", nullable=False
+    )
+
+
+class FollowUpAction(Base):
+    __tablename__ = "follow_up_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('proposed', 'approved', 'rejected')",
+            name="ck_follow_up_actions_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    change_event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("change_events.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), server_default="proposed", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AuditEntry(Base):
+    __tablename__ = "audit_entries"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    change_event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("change_events.id", ondelete="CASCADE"), nullable=False
+    )
+    action_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("follow_up_actions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
@@ -188,4 +229,11 @@ def persist_snapshot(
     )
     session.add(event)
     session.flush()
+    session.add_all(
+        FollowUpAction(change_event_id=event.id, title=title)
+        for title in (
+            "Review other studies involving the same intervention",
+            "Assign the change to the relevant pipeline analyst",
+        )
+    )
     return event

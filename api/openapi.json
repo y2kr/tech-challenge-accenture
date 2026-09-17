@@ -209,6 +209,76 @@
         }
       }
     },
+    "/api/actions/{action_id}": {
+      "patch": {
+        "summary": "Decide Action",
+        "operationId": "decide_action_api_actions__action_id__patch",
+        "parameters": [
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Action Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowUpActionView"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -272,6 +342,86 @@
   },
   "components": {
     "schemas": {
+      "AIAnalysis": {
+        "properties": {
+          "headline": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Headline"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Summary"
+          },
+          "possible_significance": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Possible Significance"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "headline",
+          "summary",
+          "possible_significance",
+          "confidence"
+        ],
+        "title": "AIAnalysis"
+      },
+      "AuditEntryView": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "action_id": {
+            "type": "integer",
+            "title": "Action Id"
+          },
+          "action_title": {
+            "type": "string",
+            "title": "Action Title"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "action_id",
+          "action_title",
+          "decision",
+          "created_at"
+        ],
+        "title": "AuditEntryView"
+      },
       "ChangeDetail": {
         "properties": {
           "id": {
@@ -352,6 +502,30 @@
           },
           "after": {
             "$ref": "#/components/schemas/SnapshotEvidence"
+          },
+          "ai_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/FollowUpActionView"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "audit_timeline": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryView"
+            },
+            "type": "array",
+            "title": "Audit Timeline"
           }
         },
         "type": "object",
@@ -370,7 +544,10 @@
           "created_at",
           "structured_diff",
           "before",
-          "after"
+          "after",
+          "ai_analysis",
+          "actions",
+          "audit_timeline"
         ],
         "title": "ChangeDetail"
       },
@@ -460,6 +637,23 @@
         ],
         "title": "ChangeSummary"
       },
+      "DecisionRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DecisionRequest"
+      },
       "FieldChange": {
         "properties": {
           "field": {
@@ -480,6 +674,40 @@
           "after"
         ],
         "title": "FieldChange"
+      },
+      "FollowUpActionView": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "created_at"
+        ],
+        "title": "FollowUpActionView"
       },
       "HTTPValidationError": {
         "properties": {

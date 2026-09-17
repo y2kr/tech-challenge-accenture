@@ -14,7 +14,14 @@ from monitor.changes import normalise_snapshot
 from monitor.main import app
 from monitor.monitoring import database_engine
 from monitor.settings import settings
-from monitor.storage import ChangeEvent, StoredStudy, StudySnapshot, persist_snapshot
+from monitor.storage import (
+    AuditEntry,
+    ChangeEvent,
+    FollowUpAction,
+    StoredStudy,
+    StudySnapshot,
+    persist_snapshot,
+)
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or settings.test_database_url
 
@@ -100,6 +107,8 @@ def test_migration_offline_sql_contains_tables(capsys):
     assert "CREATE TABLE studies" in output
     assert "CREATE TABLE study_snapshots" in output
     assert "CREATE TABLE change_events" in output
+    assert "CREATE TABLE follow_up_actions" in output
+    assert "CREATE TABLE audit_entries" in output
 
 
 def test_repeat_sync_updates_metadata_without_duplicate_event(sessions):
@@ -181,7 +190,11 @@ def test_repeated_replay_does_not_rewind_current_snapshot(sessions):
         assert snapshot.normalised_data["overall_status"] == "TERMINATED"
 
 
-def test_api_replay_flow_uses_database_dependency_override(sessions):
+def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch):
+    def fail_ai(changes):
+        raise ValueError("model timeout")
+
+    monkeypatch.setattr("monitor.monitoring._generate_ai_analysis", fail_ai)
     app.dependency_overrides[database_engine] = lambda: sessions.kw["bind"]
     try:
         with TestClient(app) as client:
@@ -227,6 +240,29 @@ def test_api_replay_flow_uses_database_dependency_override(sessions):
                 "before": "RECRUITING",
                 "after": "TERMINATED",
             }
+            assert payload["ai_analysis"] is None
+            assert len(payload["actions"]) == 2
+            assert {action["status"] for action in payload["actions"]} == {"proposed"}
+            assert payload["audit_timeline"] == []
+
+            action = payload["actions"][0]
+            decision = client.patch(
+                f"/api/actions/{action['id']}", json={"status": "approved"}
+            )
+            assert decision.status_code == 200
+            assert decision.json()["status"] == "approved"
+
+            decided = client.get(f"/api/changes/{changes[0]['id']}").json()
+            assert decided["review_status"] == "approved"
+            assert decided["audit_timeline"][0] == {
+                "id": decided["audit_timeline"][0]["id"],
+                "action_id": action["id"],
+                "action_title": action["title"],
+                "decision": "approved",
+                "created_at": decided["audit_timeline"][0]["created_at"],
+            }
+            assert session_count(sessions, AuditEntry) == 1
+            assert session_count(sessions, FollowUpAction) == 2
     finally:
         app.dependency_overrides.pop(database_engine, None)
 
@@ -253,5 +289,12 @@ def test_migration_created_tables(sessions):
             "studies",
             "study_snapshots",
             "change_events",
+            "follow_up_actions",
+            "audit_entries",
             "alembic_version",
         } <= set(tables)
+
+
+def session_count(sessions, model) -> int:
+    with sessions() as session:
+        return session.scalar(select(func.count()).select_from(model))

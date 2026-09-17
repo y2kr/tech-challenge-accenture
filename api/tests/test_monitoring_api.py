@@ -22,8 +22,11 @@ def test_monitoring_without_database_is_explicitly_unavailable(monkeypatch):
         ("post", "/api/sync?mode=replay"),
         ("get", "/api/changes"),
         ("get", "/api/changes/1"),
+        ("patch", "/api/actions/1"),
     ):
-        response = getattr(client, method)(path)
+        response = getattr(client, method)(
+            path, **({"json": {"status": "approved"}} if method == "patch" else {})
+        )
         assert response.status_code == 503
         assert response.json() == {"detail": "Monitoring database is not configured."}
     assert client.get("/health").status_code == 200
@@ -105,11 +108,47 @@ def test_monitoring_input_and_post_cors(configured_boundary):
     assert client.get("/api/changes?source=arbitrary").status_code == 422
     assert client.get("/api/changes/0").status_code == 422
     response = client.options(
-        "/api/sync",
+        "/api/actions/1",
         headers={
             "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Method": "PATCH",
         },
     )
     assert response.status_code == 200
-    assert "POST" in response.headers["access-control-allow-methods"]
+    assert "PATCH" in response.headers["access-control-allow-methods"]
+
+
+def test_ai_explanation_is_structured_and_receives_only_evidence(monkeypatch):
+    change = monitoring.FieldChange(
+        field="overall_status", before="RECRUITING", after="TERMINATED"
+    )
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    received = {}
+
+    analysis_result = monitoring.AIAnalysis(
+        headline="Study status changed to terminated",
+        summary="The status moved from recruiting to terminated.",
+        possible_significance=["The change may warrant analyst review."],
+        confidence="high",
+    )
+
+    class Completions:
+        def parse(self, **kwargs):
+            received.update(kwargs)
+            message = type("Message", (), {"parsed": analysis_result})()
+            choice = type("Choice", (), {"message": message})()
+            return type("Completion", (), {"choices": [choice]})()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.chat = type("Chat", (), {"completions": Completions()})()
+
+    monkeypatch.setattr(monitoring, "OpenAI", FakeOpenAI)
+
+    analysis = monitoring._generate_ai_analysis([change])
+
+    assert analysis is not None
+    assert analysis.confidence == "high"
+    user_payload = json.loads(received["messages"][1]["content"])
+    assert user_payload == {"evidence": [change.model_dump(mode="json")]}
+    assert "severity" not in user_payload
