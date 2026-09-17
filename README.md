@@ -4,27 +4,46 @@ Decision-support workspace that monitors AstraZeneca-led studies through the off
 
 ## Local setup
 
-Requires uv, Node 22 and pnpm. Stage 2 additionally requires an existing PostgreSQL database; this repository does not provision one.
+Requires uv, Node 22 and pnpm. Monitoring additionally requires a PostgreSQL database; this repository does not provision one.
 
 ```bash
 cp api/.env.example api/.env
 cp web/.env.example web/.env.local
 uv sync --project api
 pnpm --dir web install
+```
+
+Set `DATABASE_URL` in `api/.env` to a PostgreSQL URL such as `postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE`. Never commit credentials. A throwaway local database is enough:
+
+```bash
+podman run -d --name monitor-pg -p 5432:5432 \
+  -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=monitor \
+  docker.io/library/postgres:17
+```
+
+That container matches `postgresql+psycopg://postgres:dev@localhost:5432/monitor`. Apply the schema, then start both servers in separate terminals from the repository root:
+
+```bash
+(cd api && uv run alembic upgrade head)
 
 (cd api && uv run fastapi dev src/monitor/main.py)
 (cd web && pnpm dev)
 ```
 
-Run the API and web commands in separate terminals from the repository root. Open http://localhost:3000. The browser watchlist remains live; Stage 2 change detection is available through the API, not a new UI.
+Open http://localhost:3000 for the watchlist and http://localhost:3000/changes for the change inbox. Restart the API after editing `api/.env`; settings are read at startup.
 
-For monitoring, set `DATABASE_URL` in `api/.env` to your existing database, then apply the schema before starting the API:
+Without `DATABASE_URL`, the watchlist and health endpoint still work, but every monitoring endpoint returns an explicit 503 and the change inbox renders "Monitoring database is not configured." Without `OPENAI_API_KEY`, the inbox and detail views work and the AI analysis section reports that it is unavailable.
 
-```bash
-(cd api && uv run alembic upgrade head)
-```
+## Deployment
 
-Use a PostgreSQL URL such as `postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE`. Never commit credentials. Without `DATABASE_URL`, the watchlist and health endpoint still work; monitoring endpoints return an explicit 503.
+The API runs as a container on Render; the web app runs on Vercel. `render.yaml` is a Render Blueprint that declares the service, a free PostgreSQL instance, the health check, and `alembic upgrade head` as the pre-deploy command. Push the repository first; both hosts build from GitHub.
+
+1. Render → New → Blueprint → select this repository. When prompted, supply `OPENAI_API_KEY` and set `CORS_ORIGINS` to a placeholder such as `https://example.vercel.app`.
+2. Vercel → import the same repository → **root directory `web`** → set `NEXT_PUBLIC_API_BASE_URL` to the Render URL, without a trailing slash.
+3. Set `CORS_ORIGINS` on Render to the Vercel domain from step 2 and redeploy. Until this matches exactly, browser calls fail while `curl` still succeeds.
+4. Seed the demonstration: `curl -X POST 'https://YOUR-API.onrender.com/api/sync?mode=replay'`.
+
+Render's free PostgreSQL expires after 30 days; for a longer-lived deployment, create a Neon database instead and set `DATABASE_URL` manually. Hosted connection strings begin `postgresql://`, which SQLAlchemy reads as psycopg2; settings rewrite that prefix to `postgresql+psycopg://` automatically, so paste the string as issued. Free instances sleep when idle, so the first request after a pause is slow.
 
 ## Environment variables
 
@@ -34,6 +53,8 @@ Use a PostgreSQL URL such as `postgresql+psycopg://USER:PASSWORD@HOST:5432/DATAB
 | `NEXT_PUBLIC_API_BASE_URL` | web | Base URL of the API |
 | `DATABASE_URL` | api | Existing PostgreSQL database for snapshots/events; blank disables monitoring |
 | `TEST_DATABASE_URL` | api `.env` or exported test environment | PostgreSQL test database; tests create and drop only a uniquely named isolated schema |
+| `OPENAI_API_KEY` | api | Enables AI analysis on change detail; blank disables it without breaking the page |
+| `OPENAI_MODEL` | api | Model used for that analysis; defaults to `gpt-4.1-mini` |
 
 ## Checks
 
@@ -45,9 +66,11 @@ node web/scripts/study-table.test.cjs
 
 Database tests skip explicitly when `TEST_DATABASE_URL` is unset. Set it separately before running pytest to exercise migrations, persistence, and the replay API. Tests never fall back to `DATABASE_URL`. Do not point it at production. The test role must be able to create schemas.
 
-## Stage 2 demonstration
+## Demonstration
 
-With the migration applied and API running:
+In the browser, with both servers running: open the change inbox, press **Load replay event** to seed the synthetic recruiting-to-terminated event, open it for the evidence diff and AI analysis, approve or reject a follow-up action, and read the result in the audit timeline. The inbox reads the replay namespace; live events are available through the API.
+
+The same flow through the API:
 
 ```bash
 curl -X POST 'http://localhost:8000/api/sync?mode=live'
@@ -85,6 +108,6 @@ Thresholds are named constants covered by tests, not clinical conclusions. Parti
 - Only observed transitions are known. There is no claim to registry history, and omitted studies are not treated as deletions.
 - Snapshot retrieval time is the first observation of that unique content. A later return to the same content reuses that snapshot; event creation time records the later transition.
 - PostgreSQL migrations, transactional persistence, and DB-backed replay acceptance remain unverified until the gated tests run with `TEST_DATABASE_URL`. Pure rules and API boundary tests do not substitute for them.
-- No Stage 3 inbox/detail UI, AI explanation, follow-up actions, review decisions, or audit workflow is implemented. `review_status` remains `unreviewed`.
+- The inbox and detail UI cover the replay namespace only; live events are reachable through the API but have no UI controls.
 - No authentication or infrastructure was added. The manual sync endpoint is intended for this local prototype, not unrestricted public production use.
 - This is analyst decision support, not a prediction of safety, efficacy, approval, or commercial impact.
