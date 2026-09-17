@@ -1,0 +1,40 @@
+[project]
+name = "monitor"
+version = "0.1.0"
+description = "Clinical trial monitoring API"
+authors = [
+    { name = "y2kr", email = "nosh@tuta.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18,<2",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.3,<4",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0,<2.1",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "fastapi-cli>=0.0.32",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "respx>=0.23.1",
+    "ruff>=0.16.8",
+]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,71 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT90000001",
+      "briefTitle": "Synthetic replay study for monitored change detection"
+    },
+    "statusModule": {
+      "overallStatus": "TERMINATED",
+      "whyStopped": "Synthetic replay: recruitment terminated after sponsor review of feasibility.",
+      "primaryCompletionDateStruct": {
+        "date": "2026-02-15",
+        "type": "ESTIMATED"
+      },
+      "completionDateStruct": {
+        "date": "2026-07-15",
+        "type": "ESTIMATED"
+      },
+      "lastUpdatePostDateStruct": {
+        "date": "2025-02-01",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "leadSponsor": {
+        "name": "AstraZeneca"
+      }
+    },
+    "designModule": {
+      "phases": [
+        "PHASE2",
+        "PHASE3"
+      ],
+      "enrollmentInfo": {
+        "count": 350,
+        "type": "ESTIMATED"
+      }
+    },
+    "armsInterventionsModule": {
+      "interventions": [
+        {
+          "type": "DRUG",
+          "name": "Synthetic Drug A",
+          "description": "Synthetic intervention used for replay evidence."
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Synthetic primary outcome",
+          "timeFrame": "Week 24",
+          "description": "Synthetic endpoint used for replay evidence."
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Synthetic adults eligible for replay demonstration."
+    },
+    "contactsLocationsModule": {
+      "locations": [
+        {
+          "facility": "Synthetic Research Site Boston",
+          "city": "Boston",
+          "state": "Massachusetts",
+          "country": "United States"
+        }
+      ]
+    }
+  },
+  "hasResults": false
+}

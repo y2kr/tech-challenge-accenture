@@ -1,0 +1,1004 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Clinical Trial Monitoring API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/sync": {
+      "post": {
+        "summary": "Sync Studies",
+        "operationId": "sync_studies_api_sync_post",
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "live",
+                "replay"
+              ],
+              "type": "string",
+              "default": "live",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/changes": {
+      "get": {
+        "summary": "List Changes",
+        "operationId": "list_changes_api_changes_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "live",
+                "replay"
+              ],
+              "type": "string",
+              "default": "live",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChangeSummary"
+                  },
+                  "title": "Response List Changes Api Changes Get"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/changes/{change_id}": {
+      "get": {
+        "summary": "Change Detail",
+        "operationId": "change_detail_api_changes__change_id__get",
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Change Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studies": {
+      "get": {
+        "summary": "List Studies",
+        "operationId": "list_studies_api_studies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyList"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamProblem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChangeDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nct_id": {
+            "type": "string",
+            "title": "Nct Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "sponsor": {
+            "type": "string",
+            "title": "Sponsor"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "live",
+              "replay"
+            ],
+            "title": "Source"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Severity"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "review_status": {
+            "type": "string",
+            "title": "Review Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "structured_diff": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChange"
+            },
+            "type": "array",
+            "title": "Structured Diff"
+          },
+          "before": {
+            "$ref": "#/components/schemas/SnapshotEvidence"
+          },
+          "after": {
+            "$ref": "#/components/schemas/SnapshotEvidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nct_id",
+          "title",
+          "sponsor",
+          "source",
+          "label",
+          "source_url",
+          "severity",
+          "category",
+          "headline",
+          "review_status",
+          "created_at",
+          "structured_diff",
+          "before",
+          "after"
+        ],
+        "title": "ChangeDetail"
+      },
+      "ChangeSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nct_id": {
+            "type": "string",
+            "title": "Nct Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "sponsor": {
+            "type": "string",
+            "title": "Sponsor"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "live",
+              "replay"
+            ],
+            "title": "Source"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Severity"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "review_status": {
+            "type": "string",
+            "title": "Review Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nct_id",
+          "title",
+          "sponsor",
+          "source",
+          "label",
+          "source_url",
+          "severity",
+          "category",
+          "headline",
+          "review_status",
+          "created_at"
+        ],
+        "title": "ChangeSummary"
+      },
+      "FieldChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "after": {
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "title": "FieldChange"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Intervention": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "Intervention"
+      },
+      "Location": {
+        "properties": {
+          "facility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country"
+        ],
+        "title": "Location"
+      },
+      "Outcome": {
+        "properties": {
+          "measure": {
+            "type": "string",
+            "title": "Measure"
+          },
+          "time_frame": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Frame"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "measure"
+        ],
+        "title": "Outcome"
+      },
+      "Problem": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Problem"
+      },
+      "Snapshot": {
+        "properties": {
+          "overall_status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE_NOT_RECRUITING",
+              "COMPLETED",
+              "ENROLLING_BY_INVITATION",
+              "NOT_YET_RECRUITING",
+              "RECRUITING",
+              "SUSPENDED",
+              "TERMINATED",
+              "WITHDRAWN",
+              "AVAILABLE",
+              "NO_LONGER_AVAILABLE",
+              "TEMPORARILY_NOT_AVAILABLE",
+              "APPROVED_FOR_MARKETING",
+              "WITHHELD",
+              "UNKNOWN"
+            ],
+            "title": "Overall Status"
+          },
+          "reason_stopped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Stopped"
+          },
+          "phases": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "NA",
+                "EARLY_PHASE1",
+                "PHASE1",
+                "PHASE2",
+                "PHASE3",
+                "PHASE4"
+              ]
+            },
+            "type": "array",
+            "title": "Phases"
+          },
+          "enrollment_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrollment Count"
+          },
+          "primary_completion_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Completion Date"
+          },
+          "completion_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion Date"
+          },
+          "interventions": {
+            "items": {
+              "$ref": "#/components/schemas/Intervention"
+            },
+            "type": "array",
+            "title": "Interventions"
+          },
+          "primary_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/Outcome"
+            },
+            "type": "array",
+            "title": "Primary Outcomes"
+          },
+          "eligibility_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligibility Criteria"
+          },
+          "countries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Countries"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/Location"
+            },
+            "type": "array",
+            "title": "Locations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall_status",
+          "phases",
+          "interventions",
+          "primary_outcomes",
+          "countries",
+          "locations"
+        ],
+        "title": "Snapshot"
+      },
+      "SnapshotEvidence": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "normalised_data": {
+            "$ref": "#/components/schemas/Snapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "retrieved_at",
+          "content_hash",
+          "normalised_data"
+        ],
+        "title": "SnapshotEvidence"
+      },
+      "Study": {
+        "properties": {
+          "nct_id": {
+            "type": "string",
+            "title": "Nct Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "lead_sponsor": {
+            "type": "string",
+            "title": "Lead Sponsor"
+          },
+          "phases": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "NA",
+                "EARLY_PHASE1",
+                "PHASE1",
+                "PHASE2",
+                "PHASE3",
+                "PHASE4"
+              ]
+            },
+            "type": "array",
+            "title": "Phases"
+          },
+          "overall_status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE_NOT_RECRUITING",
+              "COMPLETED",
+              "ENROLLING_BY_INVITATION",
+              "NOT_YET_RECRUITING",
+              "RECRUITING",
+              "SUSPENDED",
+              "TERMINATED",
+              "WITHDRAWN",
+              "AVAILABLE",
+              "NO_LONGER_AVAILABLE",
+              "TEMPORARILY_NOT_AVAILABLE",
+              "APPROVED_FOR_MARKETING",
+              "WITHHELD",
+              "UNKNOWN"
+            ],
+            "title": "Overall Status"
+          },
+          "last_update_posted": {
+            "type": "string",
+            "format": "date",
+            "title": "Last Update Posted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nct_id",
+          "title",
+          "lead_sponsor",
+          "phases",
+          "overall_status",
+          "last_update_posted"
+        ],
+        "title": "Study"
+      },
+      "StudyList": {
+        "properties": {
+          "studies": {
+            "items": {
+              "$ref": "#/components/schemas/Study"
+            },
+            "type": "array",
+            "title": "Studies"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "studies",
+          "skipped",
+          "retrieved_at"
+        ],
+        "title": "StudyList"
+      },
+      "SyncResult": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "live",
+              "replay"
+            ],
+            "title": "Source"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "processed": {
+            "type": "integer",
+            "title": "Processed"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "event_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Event Ids"
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "label",
+          "processed",
+          "skipped",
+          "event_ids",
+          "retrieved_at"
+        ],
+        "title": "SyncResult"
+      },
+      "UpstreamProblem": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "upstream_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail",
+          "upstream_status"
+        ],
+        "title": "UpstreamProblem"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

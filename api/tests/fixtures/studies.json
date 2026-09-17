@@ -1,0 +1,288 @@
+{
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT06137144",
+          "orgStudyIdInfo": {
+            "id": "D9971C00001"
+          },
+          "secondaryIdInfos": [
+            {
+              "id": "2023-506747-42-00",
+              "type": "REGISTRY",
+              "domain": "CTIS (EU)"
+            },
+            {
+              "id": "2023",
+              "type": "NIH",
+              "link": "https://reporter.nih.gov/quickSearch/2023"
+            }
+          ],
+          "organization": {
+            "fullName": "AstraZeneca",
+            "class": "INDUSTRY"
+          },
+          "briefTitle": "AZD3470 as Monotherapy or in Combination With Anticancer Agent(s) in Participants With Haematologic Malignancies.",
+          "officialTitle": "A Modular Phase I/II, Open-label, Multicentre Study to Evaluate the Safety, Tolerability, and Efficacy of AZD3470, a PRMT5 Inhibitor, as Monotherapy or in Combination With Anticancer Agent(s) in Participants With Haematologic Malignancies",
+          "acronym": "PRIMAVERA"
+        },
+        "statusModule": {
+          "statusVerifiedDate": "2026-09",
+          "overallStatus": "RECRUITING",
+          "expandedAccessInfo": {
+            "hasExpandedAccess": false
+          },
+          "startDateStruct": {
+            "date": "2024-01-23",
+            "type": "ACTUAL"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2029-05-03",
+            "type": "ESTIMATED"
+          },
+          "completionDateStruct": {
+            "date": "2029-05-03",
+            "type": "ESTIMATED"
+          },
+          "studyFirstSubmitDate": "2023-11-02",
+          "studyFirstSubmitQcDate": "2023-11-13",
+          "studyFirstPostDateStruct": {
+            "date": "2023-11-18",
+            "type": "ACTUAL"
+          },
+          "lastUpdateSubmitDate": "2026-09-11",
+          "lastUpdatePostDateStruct": {
+            "date": "2026-09-14",
+            "type": "ACTUAL"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "responsibleParty": {
+            "type": "SPONSOR"
+          },
+          "leadSponsor": {
+            "name": "AstraZeneca",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "PHASE1",
+            "PHASE2"
+          ],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "interventionModel": "SEQUENTIAL",
+            "primaryPurpose": "TREATMENT",
+            "maskingInfo": {
+              "masking": "NONE"
+            }
+          },
+          "enrollmentInfo": {
+            "count": 161,
+            "type": "ESTIMATED"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Lymphoma",
+            "Non-Hodgkin Lymphoma",
+            "Hodgkin Lymphoma",
+            "Peripheral T-cell Lymphoma (PTCL)",
+            "PTCL-NOS",
+            "ALCL",
+            "AITL"
+          ],
+          "keywords": [
+            "Haematologic Malignancies",
+            "Hodgkin lymphoma",
+            "Peripheral T-cell lymphoma (PTCL)",
+            "Methylthioadenosine Phosphorylase (MTAP) deficient",
+            "Protein Arginine Methyltransferase 5 (PRMT5)"
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT07646600",
+          "orgStudyIdInfo": {
+            "id": "D9030R00003"
+          },
+          "organization": {
+            "fullName": "AstraZeneca",
+            "class": "INDUSTRY"
+          },
+          "briefTitle": "Observational Study of Natural History of BAG3 Gene Mutation-Associated Dilated Cardiomyopathy in Chinese Adults",
+          "officialTitle": "Natural History of BAG3 Gene Mutation-Associated Dilated Cardiomyopathy in Chinese Adults: A Multicentre, Prospective, Observational Cohort Study"
+        },
+        "statusModule": {
+          "statusVerifiedDate": "2026-09",
+          "overallStatus": "RECRUITING",
+          "expandedAccessInfo": {
+            "hasExpandedAccess": false
+          },
+          "startDateStruct": {
+            "date": "2026-08-18",
+            "type": "ACTUAL"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2027-08-31",
+            "type": "ESTIMATED"
+          },
+          "completionDateStruct": {
+            "date": "2027-08-31",
+            "type": "ESTIMATED"
+          },
+          "studyFirstSubmitDate": "2026-04-29",
+          "studyFirstSubmitQcDate": "2026-06-09",
+          "studyFirstPostDateStruct": {
+            "date": "2026-06-15",
+            "type": "ACTUAL"
+          },
+          "lastUpdateSubmitDate": "2026-09-15",
+          "lastUpdatePostDateStruct": {
+            "date": "2026-09-16",
+            "type": "ACTUAL"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "responsibleParty": {
+            "type": "SPONSOR"
+          },
+          "leadSponsor": {
+            "name": "AstraZeneca",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "OBSERVATIONAL",
+          "patientRegistry": false,
+          "designInfo": {
+            "observationalModel": "COHORT",
+            "timePerspective": "PROSPECTIVE"
+          },
+          "bioSpec": {
+            "retention": "NONE_RETAINED",
+            "description": "Whole blood"
+          },
+          "enrollmentInfo": {
+            "count": 10,
+            "type": "ESTIMATED"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Dilated Cardiomyopathy"
+          ],
+          "keywords": [
+            "BAG3 ; Dilated cardiomyopathy; Observational Cohort Study"
+          ]
+        }
+      },
+      "hasResults": false
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT06677060",
+          "orgStudyIdInfo": {
+            "id": "D6973C00001"
+          },
+          "secondaryIdInfos": [
+            {
+              "id": "2024-514506-32-00",
+              "type": "REGISTRY",
+              "domain": "EU CT number"
+            }
+          ],
+          "organization": {
+            "fullName": "AstraZeneca",
+            "class": "INDUSTRY"
+          },
+          "briefTitle": "Phase III Study Investigating Heart Failure and Cardiovascular Death With Baxdrostat in Combination With Dapagliflozin",
+          "officialTitle": "A Phase III, Randomised, Placebo-controlled, Event-driven Study to Evaluate the Effect of Baxdrostat in Combination With Dapagliflozin Compared With Dapagliflozin Alone on the Risk of Incident Heart Failure and Cardiovascular Death",
+          "acronym": "Prevent-HF"
+        },
+        "statusModule": {
+          "statusVerifiedDate": "2026-09",
+          "overallStatus": "PAUSED_FOR_REVIEW",
+          "expandedAccessInfo": {
+            "hasExpandedAccess": false
+          },
+          "startDateStruct": {
+            "date": "2025-03-14",
+            "type": "ACTUAL"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2029-12-17",
+            "type": "ESTIMATED"
+          },
+          "completionDateStruct": {
+            "date": "2029-12-17",
+            "type": "ESTIMATED"
+          },
+          "studyFirstSubmitDate": "2024-11-05",
+          "studyFirstSubmitQcDate": "2024-11-05",
+          "studyFirstPostDateStruct": {
+            "date": "2024-11-06",
+            "type": "ACTUAL"
+          },
+          "lastUpdateSubmitDate": "2026-09-14",
+          "lastUpdatePostDateStruct": {
+            "date": "2026-09-15",
+            "type": "ACTUAL"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "responsibleParty": {
+            "type": "SPONSOR"
+          },
+          "leadSponsor": {
+            "name": "AstraZeneca",
+            "class": "INDUSTRY"
+          }
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "PHASE3"
+          ],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "interventionModel": "PARALLEL",
+            "primaryPurpose": "PREVENTION",
+            "maskingInfo": {
+              "masking": "QUADRUPLE",
+              "maskingDescription": "Placebo controlled",
+              "whoMasked": [
+                "PARTICIPANT",
+                "CARE_PROVIDER",
+                "INVESTIGATOR",
+                "OUTCOMES_ASSESSOR"
+              ]
+            }
+          },
+          "enrollmentInfo": {
+            "count": 11300,
+            "type": "ESTIMATED"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Heart Failure"
+          ],
+          "keywords": [
+            "Heart failure: Baxdrostat; Dapagliflozin; cardiovascular"
+          ]
+        }
+      },
+      "hasResults": false
+    }
+  ],
+  "nextPageToken": "ZVNj7o2Elu8o3lpwD8-u57L2mpOQJJxuYvmt1f0SmD6SuP08FCfCFPfY_tVI1CI"
+}

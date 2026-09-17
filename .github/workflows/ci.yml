@@ -6,9 +6,24 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      CORS_ORIGINS: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-extras --dev
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: uv sync --project api --locked
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
       - run: ./scripts/check
       - run: uv run pytest
+        working-directory: api
+      - run: pnpm gen:api && git diff --exit-code -- ../api/openapi.json src/api/schema.d.ts
+        working-directory: web
