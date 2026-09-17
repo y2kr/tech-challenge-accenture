@@ -9,7 +9,6 @@ services:
     plan: free
     rootDir: api
     healthCheckPath: /health
-    preDeployCommand: alembic upgrade head
     envVars:
       - key: DATABASE_URL
         fromDatabase:

@@ -16,4 +16,4 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
 
-CMD ["sh", "-c", "exec uvicorn monitor.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn monitor.main:app --host 0.0.0.0 --port ${PORT:-10000}"]

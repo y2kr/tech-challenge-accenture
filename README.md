@@ -36,7 +36,7 @@ Without `DATABASE_URL`, the watchlist and health endpoint still work, but every 
 
 ## Deployment
 
-The API runs as a container on Render; the web app runs on Vercel. `render.yaml` is a Render Blueprint that declares the service, a free PostgreSQL instance, the health check, and `alembic upgrade head` as the pre-deploy command. Push the repository first; both hosts build from GitHub.
+The API runs as a container on Render; the web app runs on Vercel. `render.yaml` is a Render Blueprint that declares the service, a free PostgreSQL instance, and the health check. The container runs `alembic upgrade head` before starting uvicorn, because Render's free tier supports neither a pre-deploy command nor shell access. Push the repository first; both hosts build from GitHub.
 
 1. Render → New → Blueprint → select this repository. When prompted, supply `OPENAI_API_KEY` and set `CORS_ORIGINS` to a placeholder such as `https://example.vercel.app`.
 2. Vercel → import the same repository → **root directory `web`** → set `NEXT_PUBLIC_API_BASE_URL` to the Render URL, without a trailing slash.
