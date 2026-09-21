@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
+from monitor.auth import api_access_denied, api_request_authorized
 from monitor.clinicaltrials import (
     Study,
     UpstreamError,
@@ -18,10 +19,23 @@ from monitor.settings import settings
 app = FastAPI(title="Clinical Trial Monitoring API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split(","),
+    allow_origins=[
+        origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()
+    ],
     allow_methods=["GET", "POST", "PATCH"],
 )
 app.include_router(router)
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    if (
+        request.method != "OPTIONS"
+        and request.url.path.startswith("/api")
+        and not api_request_authorized(request)
+    ):
+        return api_access_denied()
+    return await call_next(request)
 
 
 @app.exception_handler(SQLAlchemyError)

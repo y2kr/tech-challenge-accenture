@@ -1,0 +1,23 @@
+databases:
+  - name: accenture-reconciliation-db
+    plan: free
+
+services:
+  - type: web
+    name: accenture-reconciliation-api
+    runtime: docker
+    plan: free
+    rootDir: api
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: accenture-reconciliation-db
+          property: connectionString
+      - key: API_ACCESS_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini

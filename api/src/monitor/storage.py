@@ -141,6 +141,58 @@ class AuditEntry(Base):
     )
 
 
+class VerificationDraft(Base):
+    __tablename__ = "verification_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('proposed', 'approved', 'rejected')",
+            name="ck_verification_drafts_status",
+        ),
+        CheckConstraint(
+            "origin in ('ai', 'manual')", name="ck_verification_drafts_origin"
+        ),
+        UniqueConstraint("change_event_id", name="uq_verification_drafts_change_event"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    change_event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("change_events.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class VerificationDraftHistory(Base):
+    __tablename__ = "verification_draft_history"
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('proposed', 'approved', 'rejected')",
+            name="ck_verification_draft_history_status",
+        ),
+        CheckConstraint(
+            "event in ('generated', 'edited', 'approved', 'rejected')",
+            name="ck_verification_draft_history_event",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    change_event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("change_events.id", ondelete="CASCADE"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    body: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    event: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 def _locked_study(
     session: Session, source: Source, raw: dict[str, Any], update: bool
 ) -> StoredStudy:

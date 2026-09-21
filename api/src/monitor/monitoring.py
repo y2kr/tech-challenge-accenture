@@ -22,11 +22,16 @@ from monitor.storage import (
     FollowUpAction,
     StoredStudy,
     StudySnapshot,
+    VerificationDraft,
+    VerificationDraftHistory,
     persist_snapshot,
 )
 
 Source = Literal["live", "replay"]
 ActionStatus = Literal["proposed", "approved", "rejected"]
+DraftStatus = Literal["proposed", "approved", "rejected"]
+DraftOrigin = Literal["ai", "manual"]
+DraftEvent = Literal["generated", "edited", "approved", "rejected"]
 Decision = Literal["approved", "rejected"]
 REPLAY_LABEL = "Synthetic replay: recruiting to terminated; not live registry history"
 logger = logging.getLogger(__name__)
@@ -91,6 +96,36 @@ class DecisionRequest(BaseModel):
     status: Decision
 
 
+class DraftPatchRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    revision: int = Field(default=0, ge=0)
+
+
+class DraftDecisionRequest(BaseModel):
+    status: Decision
+    revision: int = Field(ge=1)
+
+
+class VerificationDraftBody(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class VerificationDraftView(BaseModel):
+    body: str
+    revision: int
+    status: DraftStatus
+    origin: DraftOrigin
+    updated_at: datetime
+
+
+class VerificationDraftHistoryView(BaseModel):
+    revision: int
+    body: str
+    status: DraftStatus
+    event: DraftEvent
+    created_at: datetime
+
+
 class ChangeSummary(BaseModel):
     id: int
     nct_id: str
@@ -120,6 +155,8 @@ class ChangeDetail(ChangeSummary):
     ai_analysis: AIAnalysis | None
     actions: list[FollowUpActionView]
     audit_timeline: list[AuditEntryView]
+    draft: VerificationDraftView | None
+    draft_history: list[VerificationDraftHistoryView]
 
 
 def _label(source: Source) -> str:
@@ -152,6 +189,63 @@ def _generate_ai_analysis(changes: list[FieldChange]) -> AIAnalysis | None:
     if analysis is None:
         raise ValueError("model returned no structured explanation")
     return analysis
+
+
+def _generate_verification_draft(
+    event: ChangeEvent, study: StoredStudy
+) -> VerificationDraftBody | None:
+    if not settings.openai_api_key:
+        return None
+    evidence = {
+        "study": {
+            "nct_id": study.nct_id,
+            "title": study.title,
+            "source": study.source,
+            "label": _label(study.source),
+            "source_url": (
+                f"https://clinicaltrials.gov/study/{study.nct_id}"
+                if study.source == "live"
+                else None
+            ),
+        },
+        "changes": event.structured_diff,
+    }
+    completion = OpenAI(
+        api_key=settings.openai_api_key, timeout=10
+    ).chat.completions.parse(
+        model=settings.openai_model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Write a concise verification request to the study owner using only "
+                    "the supplied study metadata and before/after evidence. Do not invent "
+                    "recipients, causes, medical conclusions, predictions, or company "
+                    "assertions. Ask them to verify the public-record change. If source "
+                    "is replay, explicitly label it synthetic and do not imply it is live "
+                    "public registry history."
+                ),
+            },
+            {"role": "user", "content": json.dumps({"evidence": evidence})},
+        ],
+        response_format=VerificationDraftBody,
+    )
+    draft = completion.choices[0].message.parsed
+    if draft is None:
+        raise ValueError("model returned no verification draft")
+    return draft
+
+
+def _draft_view(draft: VerificationDraft | None) -> VerificationDraftView | None:
+    if draft is None:
+        return None
+    return VerificationDraftView(
+        body=draft.body,
+        revision=draft.revision,
+        status=draft.status,
+        origin=draft.origin,
+        updated_at=draft.updated_at,
+    )
 
 
 def _save(
@@ -250,7 +344,9 @@ async def sync_studies(engine: Database, mode: Source = "live") -> SyncResult:
     )
 
 
-def _summary(event: ChangeEvent, study: StoredStudy) -> ChangeSummary:
+def _summary(
+    event: ChangeEvent, study: StoredStudy, draft_status: str | None = None
+) -> ChangeSummary:
     status = next(
         (item for item in event.structured_diff if item["field"] == "overall_status"),
         None,
@@ -276,7 +372,7 @@ def _summary(event: ChangeEvent, study: StoredStudy) -> ChangeSummary:
         severity=event.severity,
         category=event.category,
         headline=headline,
-        review_status=event.review_status,
+        review_status=draft_status or event.review_status,
         created_at=event.created_at,
     )
 
@@ -294,14 +390,20 @@ def list_changes(
         else_=3,
     )
     statement = (
-        select(ChangeEvent, StoredStudy)
+        select(ChangeEvent, StoredStudy, VerificationDraft.status)
         .join(StoredStudy, ChangeEvent.study_id == StoredStudy.id)
+        .outerjoin(
+            VerificationDraft, VerificationDraft.change_event_id == ChangeEvent.id
+        )
         .where(StoredStudy.source == source)
         .order_by(priority, ChangeEvent.created_at.desc(), ChangeEvent.id.desc())
         .limit(limit)
     )
     with Session(engine) as session:
-        return [_summary(event, study) for event, study in session.execute(statement)]
+        return [
+            _summary(event, study, draft_status)
+            for event, study, draft_status in session.execute(statement)
+        ]
 
 
 @router.get(
@@ -344,8 +446,18 @@ def change_detail(
             .where(AuditEntry.change_event_id == event.id)
             .order_by(AuditEntry.created_at, AuditEntry.id)
         ).all()
+        draft = session.scalar(
+            select(VerificationDraft).where(
+                VerificationDraft.change_event_id == event.id
+            )
+        )
+        draft_history = session.scalars(
+            select(VerificationDraftHistory)
+            .where(VerificationDraftHistory.change_event_id == event.id)
+            .order_by(VerificationDraftHistory.created_at, VerificationDraftHistory.id)
+        ).all()
         return ChangeDetail(
-            **_summary(event, study).model_dump(),
+            **_summary(event, study, draft.status if draft else None).model_dump(),
             structured_diff=event.structured_diff,
             before=evidence[0],
             after=evidence[1],
@@ -369,7 +481,189 @@ def change_detail(
                 )
                 for entry in audit_entries
             ],
+            draft=_draft_view(draft),
+            draft_history=[
+                VerificationDraftHistoryView(
+                    revision=entry.revision,
+                    body=entry.body,
+                    status=entry.status,
+                    event=entry.event,
+                    created_at=entry.created_at,
+                )
+                for entry in draft_history
+            ],
         )
+
+
+@router.post(
+    "/changes/{change_id}/draft",
+    responses={404: {"model": Problem}, 503: {"model": Problem}},
+)
+def generate_draft(
+    engine: Database, change_id: Annotated[int, Path(gt=0)]
+) -> VerificationDraftView:
+    with Session(engine) as session:
+        row = session.execute(
+            select(ChangeEvent, StoredStudy)
+            .join(StoredStudy, ChangeEvent.study_id == StoredStudy.id)
+            .where(ChangeEvent.id == change_id)
+        ).first()
+        if row is None:
+            raise HTTPException(404, "Change event not found.")
+        event, study = row
+        existing = session.scalar(
+            select(VerificationDraft).where(
+                VerificationDraft.change_event_id == event.id
+            )
+        )
+        if existing is not None:
+            return _draft_view(existing)
+        try:
+            generated = _generate_verification_draft(event, study)
+        except (OpenAIError, KeyError, IndexError, TypeError, ValueError) as error:
+            logger.warning(
+                "AI verification draft unavailable for event %s: %s", change_id, error
+            )
+            raise HTTPException(503, "AI verification draft is unavailable.") from error
+        if generated is None:
+            raise HTTPException(503, "AI verification draft is unavailable.")
+    with Session(engine) as session, session.begin():
+        event = session.scalar(
+            select(ChangeEvent).where(ChangeEvent.id == change_id).with_for_update()
+        )
+        if event is None:
+            raise HTTPException(404, "Change event not found.")
+        existing = session.scalar(
+            select(VerificationDraft)
+            .where(VerificationDraft.change_event_id == event.id)
+            .with_for_update()
+        )
+        if existing is not None:
+            return _draft_view(existing)
+        draft = VerificationDraft(
+            change_event_id=event.id,
+            body=generated.body,
+            revision=1,
+            status="proposed",
+            origin="ai",
+            updated_at=datetime.now(UTC),
+        )
+        session.add(draft)
+        session.add(
+            VerificationDraftHistory(
+                change_event_id=event.id,
+                revision=1,
+                body=generated.body,
+                status="proposed",
+                event="generated",
+            )
+        )
+        session.flush()
+        return _draft_view(draft)
+
+
+@router.patch(
+    "/changes/{change_id}/draft",
+    responses={
+        404: {"model": Problem},
+        409: {"model": Problem},
+        503: {"model": Problem},
+    },
+)
+def edit_draft(
+    engine: Database,
+    change_id: Annotated[int, Path(gt=0)],
+    request: DraftPatchRequest,
+) -> VerificationDraftView:
+    with Session(engine) as session, session.begin():
+        event = session.scalar(
+            select(ChangeEvent).where(ChangeEvent.id == change_id).with_for_update()
+        )
+        if event is None:
+            raise HTTPException(404, "Change event not found.")
+        draft = session.scalar(
+            select(VerificationDraft)
+            .where(VerificationDraft.change_event_id == event.id)
+            .with_for_update()
+        )
+        if draft is None:
+            if request.revision != 0:
+                raise HTTPException(409, "Draft revision is stale.")
+            draft = VerificationDraft(
+                change_event_id=event.id,
+                body=request.body,
+                revision=1,
+                status="proposed",
+                origin="manual",
+                updated_at=datetime.now(UTC),
+            )
+            session.add(draft)
+        else:
+            if request.revision != draft.revision:
+                raise HTTPException(409, "Draft revision is stale.")
+            if request.body == draft.body:
+                return _draft_view(draft)
+            draft.body = request.body
+            draft.revision += 1
+            draft.origin = "manual"
+            draft.updated_at = datetime.now(UTC)
+            draft.status = "proposed"
+        session.add(
+            VerificationDraftHistory(
+                change_event_id=event.id,
+                revision=draft.revision,
+                body=draft.body,
+                status=draft.status,
+                event="edited",
+            )
+        )
+        session.flush()
+        return _draft_view(draft)
+
+
+@router.post(
+    "/changes/{change_id}/draft/decision",
+    responses={
+        404: {"model": Problem},
+        409: {"model": Problem},
+        503: {"model": Problem},
+    },
+)
+def decide_draft(
+    engine: Database,
+    change_id: Annotated[int, Path(gt=0)],
+    request: DraftDecisionRequest,
+) -> VerificationDraftView:
+    with Session(engine) as session, session.begin():
+        event = session.scalar(
+            select(ChangeEvent).where(ChangeEvent.id == change_id).with_for_update()
+        )
+        if event is None:
+            raise HTTPException(404, "Change event not found.")
+        draft = session.scalar(
+            select(VerificationDraft)
+            .where(VerificationDraft.change_event_id == event.id)
+            .with_for_update()
+        )
+        if draft is None:
+            raise HTTPException(404, "Draft not found.")
+        if request.revision != draft.revision:
+            raise HTTPException(409, "Draft revision is stale.")
+        if draft.status == request.status:
+            return _draft_view(draft)
+        draft.status = request.status
+        draft.updated_at = datetime.now(UTC)
+        session.add(
+            VerificationDraftHistory(
+                change_event_id=event.id,
+                revision=draft.revision,
+                body=draft.body,
+                status=draft.status,
+                event=request.status,
+            )
+        )
+        session.flush()
+        return _draft_view(draft)
 
 
 @router.patch(

@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from pathlib import Path
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import sessionmaker
 
+from monitor import monitoring
 from monitor.changes import normalise_snapshot
 from monitor.main import app
 from monitor.monitoring import database_engine
@@ -20,6 +22,8 @@ from monitor.storage import (
     FollowUpAction,
     StoredStudy,
     StudySnapshot,
+    VerificationDraft,
+    VerificationDraftHistory,
     persist_snapshot,
 )
 
@@ -109,6 +113,8 @@ def test_migration_offline_sql_contains_tables(capsys):
     assert "CREATE TABLE change_events" in output
     assert "CREATE TABLE follow_up_actions" in output
     assert "CREATE TABLE audit_entries" in output
+    assert "CREATE TABLE verification_drafts" in output
+    assert "CREATE TABLE verification_draft_history" in output
 
 
 def test_repeat_sync_updates_metadata_without_duplicate_event(sessions):
@@ -197,7 +203,9 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
     monkeypatch.setattr("monitor.monitoring._generate_ai_analysis", fail_ai)
     app.dependency_overrides[database_engine] = lambda: sessions.kw["bind"]
     try:
-        with TestClient(app) as client:
+        with TestClient(
+            app, headers={"Authorization": "Bearer test-api-token"}
+        ) as client:
             first = client.post("/api/sync", params={"mode": "replay"})
             assert first.status_code == 200
             first_payload = first.json()
@@ -241,6 +249,8 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
                 "after": "TERMINATED",
             }
             assert payload["ai_analysis"] is None
+            assert payload["draft"] is None
+            assert payload["draft_history"] == []
             assert len(payload["actions"]) == 2
             assert {action["status"] for action in payload["actions"]} == {"proposed"}
             assert payload["audit_timeline"] == []
@@ -263,6 +273,149 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
             }
             assert session_count(sessions, AuditEntry) == 1
             assert session_count(sessions, FollowUpAction) == 2
+    finally:
+        app.dependency_overrides.pop(database_engine, None)
+
+
+def test_draft_api_versions_edits_and_decisions(sessions, monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(monitoring, "_generate_ai_analysis", lambda changes: None)
+
+    received = {}
+
+    class Completions:
+        def parse(self, **kwargs):
+            received.update(kwargs)
+            draft = monitoring.VerificationDraftBody(
+                body="Synthetic replay: ask the study owner to verify the public-record change."
+            )
+            message = type("Message", (), {"parsed": draft})()
+            choice = type("Choice", (), {"message": message})()
+            return type("Completion", (), {"choices": [choice]})()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.chat = type("Chat", (), {"completions": Completions()})()
+
+    monkeypatch.setattr(monitoring, "OpenAI", FakeOpenAI)
+    app.dependency_overrides[database_engine] = lambda: sessions.kw["bind"]
+    try:
+        with TestClient(app) as client:
+            headers = {"Authorization": "Bearer test-api-token"}
+            client.post("/api/sync", params={"mode": "replay"}, headers=headers)
+            change_id = client.get(
+                "/api/changes", params={"source": "replay"}, headers=headers
+            ).json()[0]["id"]
+
+            generated = client.post(f"/api/changes/{change_id}/draft", headers=headers)
+            assert generated.status_code == 200
+            assert generated.json()["revision"] == 1
+            assert generated.json()["origin"] == "ai"
+            user_payload = json.loads(received["messages"][1]["content"])
+            assert user_payload["evidence"]["study"]["nct_id"] == "NCT90000001"
+            assert user_payload["evidence"]["study"]["source"] == "replay"
+            assert "Synthetic replay" in user_payload["evidence"]["study"]["label"]
+            assert user_payload["evidence"]["changes"][0]["field"]
+
+            duplicate = client.post(f"/api/changes/{change_id}/draft", headers=headers)
+            assert duplicate.status_code == 200
+            assert duplicate.json() == generated.json()
+
+            stale = client.patch(
+                f"/api/changes/{change_id}/draft",
+                json={"body": "Manual request.", "revision": 0},
+                headers=headers,
+            )
+            assert stale.status_code == 409
+
+            edited = client.patch(
+                f"/api/changes/{change_id}/draft",
+                json={"body": "Manual request.", "revision": 1},
+                headers=headers,
+            )
+            assert edited.status_code == 200
+            assert edited.json()["revision"] == 2
+            assert edited.json()["status"] == "proposed"
+            assert edited.json()["origin"] == "manual"
+
+            approved = client.post(
+                f"/api/changes/{change_id}/draft/decision",
+                json={"status": "approved", "revision": 2},
+                headers=headers,
+            )
+            assert approved.status_code == 200
+            assert approved.json()["status"] == "approved"
+
+            no_op_edit = client.patch(
+                f"/api/changes/{change_id}/draft",
+                json={"body": "Manual request.", "revision": 2},
+                headers=headers,
+            )
+            assert no_op_edit.status_code == 200
+            assert no_op_edit.json()["revision"] == 2
+            assert no_op_edit.json()["origin"] == "manual"
+            assert no_op_edit.json()["status"] == "approved"
+
+            no_op_decision = client.post(
+                f"/api/changes/{change_id}/draft/decision",
+                json={"status": "approved", "revision": 2},
+                headers=headers,
+            )
+            assert no_op_decision.status_code == 200
+
+            stale_decision = client.post(
+                f"/api/changes/{change_id}/draft/decision",
+                json={"status": "rejected", "revision": 1},
+                headers=headers,
+            )
+            assert stale_decision.status_code == 409
+
+            action_id = client.get(f"/api/changes/{change_id}", headers=headers).json()[
+                "actions"
+            ][0]["id"]
+            legacy_decision = client.patch(
+                f"/api/actions/{action_id}",
+                json={"status": "rejected"},
+                headers=headers,
+            )
+            assert legacy_decision.status_code == 200
+
+            detail = client.get(f"/api/changes/{change_id}", headers=headers).json()
+            assert detail["review_status"] == "approved"
+            assert detail["draft"]["status"] == "approved"
+            assert [entry["event"] for entry in detail["draft_history"]] == [
+                "generated",
+                "edited",
+                "approved",
+            ]
+            assert (
+                client.get(
+                    "/api/changes", params={"source": "replay"}, headers=headers
+                ).json()[0]["review_status"]
+                == "approved"
+            )
+            assert session_count(sessions, VerificationDraft) == 1
+            assert session_count(sessions, VerificationDraftHistory) == 3
+    finally:
+        app.dependency_overrides.pop(database_engine, None)
+
+
+def test_generate_draft_without_ai_is_clear_503(sessions, monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    monkeypatch.setattr(monitoring, "_generate_ai_analysis", lambda changes: None)
+    app.dependency_overrides[database_engine] = lambda: sessions.kw["bind"]
+    try:
+        with TestClient(app) as client:
+            headers = {"Authorization": "Bearer test-api-token"}
+            client.post("/api/sync", params={"mode": "replay"}, headers=headers)
+            change_id = client.get(
+                "/api/changes", params={"source": "replay"}, headers=headers
+            ).json()[0]["id"]
+            response = client.post(f"/api/changes/{change_id}/draft", headers=headers)
+            assert response.status_code == 503
+            assert response.json() == {
+                "detail": "AI verification draft is unavailable."
+            }
     finally:
         app.dependency_overrides.pop(database_engine, None)
 
@@ -291,6 +444,8 @@ def test_migration_created_tables(sessions):
             "change_events",
             "follow_up_actions",
             "audit_entries",
+            "verification_drafts",
+            "verification_draft_history",
             "alembic_version",
         } <= set(tables)
 

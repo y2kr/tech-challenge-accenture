@@ -12,7 +12,7 @@ from monitor.clinicaltrials import STUDIES_URL
 from monitor.main import app
 from monitor.settings import settings
 
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer test-api-token"})
 
 
 def test_monitoring_without_database_is_explicitly_unavailable(monkeypatch):
@@ -22,10 +22,22 @@ def test_monitoring_without_database_is_explicitly_unavailable(monkeypatch):
         ("post", "/api/sync?mode=replay"),
         ("get", "/api/changes"),
         ("get", "/api/changes/1"),
+        ("post", "/api/changes/1/draft"),
+        ("patch", "/api/changes/1/draft"),
+        ("post", "/api/changes/1/draft/decision"),
         ("patch", "/api/actions/1"),
     ):
         response = getattr(client, method)(
-            path, **({"json": {"status": "approved"}} if method == "patch" else {})
+            path,
+            **(
+                {"json": {"body": "Check source evidence.", "revision": 0}}
+                if path.endswith("/draft") and method == "patch"
+                else {"json": {"status": "approved", "revision": 1}}
+                if path.endswith("/draft/decision")
+                else {"json": {"status": "approved"}}
+                if method == "patch"
+                else {}
+            ),
         )
         assert response.status_code == 503
         assert response.json() == {"detail": "Monitoring database is not configured."}

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from monitor.main import app
 
 payload = json.loads((Path(__file__).parent / "fixtures" / "studies.json").read_text())
-client = TestClient(app)
+client = TestClient(app, headers={"Authorization": "Bearer test-api-token"})
 
 
 @pytest.fixture

@@ -8,3 +8,5 @@ node_modules/
 next-env.d.ts
 *.tsbuildinfo
 pi-session-*.html
+/ACCENTURE-BRIEF.md
+/plan.md

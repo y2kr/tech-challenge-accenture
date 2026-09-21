@@ -1,6 +1,8 @@
-# Clinical Trial Monitoring Workspace
+# Study reconciliation workspace
 
-Decision-support workspace that monitors AstraZeneca-led studies through the official ClinicalTrials.gov v2 API. Not affiliated with or endorsed by AstraZeneca.
+A supervised public-record reconciliation demo for an AstraZeneca clinical intelligence analyst: inspect a registry change, prepare an evidence-backed verification request, and approve the saved draft. Not affiliated with or endorsed by AstraZeneca. The business need is a hypothesis, not a validated company requirement.
+
+The monitoring foundation predates this exercise. This adaptation replaces the top tabs with a single review workspace, adds versioned request drafts and a shared-password demo gate, and prepares an isolated deployment.
 
 ## Local setup
 
@@ -12,6 +14,8 @@ cp web/.env.example web/.env.local
 uv sync --project api
 pnpm --dir web install
 ```
+
+Set a strong `DEMO_PASSWORD` in `web/.env.local`. Generate a separate random `API_ACCESS_TOKEN` (for example with `openssl rand -hex 32`) and set the same value in `api/.env` and `web/.env.local`. These are server-only secrets; never use `NEXT_PUBLIC_` variables for them. Access fails closed when secrets are missing.
 
 Set `DATABASE_URL` in `api/.env` to a PostgreSQL URL such as `postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE`. Never commit credentials. A throwaway local database is enough:
 
@@ -30,30 +34,36 @@ That container matches `postgresql+psycopg://postgres:dev@localhost:5432/monitor
 (cd web && pnpm dev)
 ```
 
-Open http://localhost:3000 for the watchlist and http://localhost:3000/changes for the change inbox. Restart the API after editing `api/.env`; settings are read at startup.
+Open http://localhost:3000, sign in with the demo password, and load the synthetic scenario. The live watchlist is available through **Monitored studies**. Restart servers after changing their environment.
 
-Without `DATABASE_URL`, the watchlist and health endpoint still work, but every monitoring endpoint returns an explicit 503 and the change inbox renders "Monitoring database is not configured." Without `OPENAI_API_KEY`, the inbox and detail views work and the AI analysis section reports that it is unavailable.
+Without `DATABASE_URL`, monitoring returns an explicit 503; authenticated live study browsing remains available. Without `OPENAI_API_KEY`, evidence and manual drafting still work, but AI interpretation and request generation are unavailable. Missing AI output is never presented as an AI-generated draft.
 
 ## Deployment
 
-The API runs as a container on Render; the web app runs on Vercel. `render.yaml` is a Render Blueprint that declares the service, a free PostgreSQL instance, and the health check. The container runs `alembic upgrade head` before starting uvicorn, because Render's free tier supports neither a pre-deploy command nor shell access. Push the repository first; both hosts build from GitHub.
+### Isolated Accenture deployment
 
-1. Render → New → Blueprint → select this repository. When prompted, supply `OPENAI_API_KEY` and set `CORS_ORIGINS` to a placeholder such as `https://example.vercel.app`.
-2. Vercel → import the same repository → **root directory `web`** → set `NEXT_PUBLIC_API_BASE_URL` to the Render URL, without a trailing slash.
-3. Set `CORS_ORIGINS` on Render to the Vercel domain from step 2 and redeploy. Until this matches exactly, browser calls fail while `curl` still succeeds.
-4. Seed the demonstration: `curl -X POST 'https://YOUR-API.onrender.com/api/sync?mode=replay'`.
+Configuration only: no hosted resources have been provisioned or changed by this adaptation. Leave the existing projects, database, domains, secrets, and `render.yaml` untouched. Use **new** Render and Vercel projects connected exclusively to `y2kr/tech-challenge-accenture`, not the previous challenge repository.
 
-Render's free PostgreSQL expires after 30 days; for a longer-lived deployment, create a Neon database instead and set `DATABASE_URL` manually. Hosted connection strings begin `postgresql://`, which SQLAlchemy reads as psycopg2; settings rewrite that prefix to `postgresql+psycopg://` automatically, so paste the string as issued. Free instances sleep when idle, so the first request after a pause is slow.
+1. Verify the old projects still track their original repository. A new Blueprint filename does not disconnect an existing deployment trigger; do not push until repository connections have been checked.
+2. Create a **new** Render Blueprint using `render.accenture.yaml`. It creates `accenture-reconciliation-api` and its own `accenture-reconciliation-db`; automatic API deployment is disabled. Supply a new `API_ACCESS_TOKEN` and, if wanted, `OPENAI_API_KEY`. Never reuse the old database URL. The API container runs migrations against this new database on startup.
+3. Create a **new** Vercel project, root directory `web`. Set server-only `API_BASE_URL` to the new Render HTTPS URL, `API_ACCESS_TOKEN` to its matching token, and `DEMO_PASSWORD` to a strong demo password. No browser-facing API URL or CORS connection is needed: the web server proxies authenticated calls.
+4. Keep Vercel deployment triggers tied only to this repository. Do not transfer domains, modify the old project's Git connection, or reuse its environment configuration.
+5. After deploying, check `/health` on the new API; direct unauthenticated `/api/studies` must be denied. Open the new web URL in a private browser: sign-in must precede access to studies, drafts, and sync. Load the replay through the workspace.
+6. Confirm the old URLs still serve the old application. Isolation is not verified until both hosting dashboards and deployed URLs have been checked.
+
+Free hosting can sleep or have database lifetime limits; verify current provider terms before relying on it for the interview. Keep a local demo available. Separate projects may share provider accounts, but must not share services, database, or secrets.
 
 ## Environment variables
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `CORS_ORIGINS` | api | Comma-separated browser origins allowed to call the API |
-| `NEXT_PUBLIC_API_BASE_URL` | web | Base URL of the API |
+| `CORS_ORIGINS` | api | Optional comma-separated browser origins; unnecessary for the server-side proxy |
+| `API_BASE_URL` | web server | Base URL of the isolated API; never exposed to browser code |
+| `API_ACCESS_TOKEN` | api and web server | Matching server-to-server authentication secret |
+| `DEMO_PASSWORD` | web server | Shared demo sign-in password |
 | `DATABASE_URL` | api | Existing PostgreSQL database for snapshots/events; blank disables monitoring |
 | `TEST_DATABASE_URL` | api `.env` or exported test environment | PostgreSQL test database; tests create and drop only a uniquely named isolated schema |
-| `OPENAI_API_KEY` | api | Enables AI analysis on change detail; blank disables it without breaking the page |
+| `OPENAI_API_KEY` | api | Enables AI interpretation and request generation; blank leaves evidence and manual drafting usable |
 | `OPENAI_MODEL` | api | Model used for that analysis; defaults to `gpt-4.1-mini` |
 
 ## Checks
@@ -62,22 +72,25 @@ Render's free PostgreSQL expires after 30 days; for a longer-lived deployment, c
 ./scripts/check
 (cd api && uv run pytest)
 node web/scripts/study-table.test.cjs
+node --experimental-strip-types web/scripts/auth.test.mjs
+TEST_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DISPOSABLE_DB pnpm --dir web test:e2e
 ```
+
+Playwright applies migrations and writes demo data: use a dedicated disposable database, never an existing deployment database. It starts its own API and web servers with test-only access credentials.
 
 Database tests skip explicitly when `TEST_DATABASE_URL` is unset. Set it separately before running pytest to exercise migrations, persistence, and the replay API. Tests never fall back to `DATABASE_URL`. Do not point it at production. The test role must be able to create schemas.
 
 ## Demonstration
 
-In the browser, with both servers running: open the change inbox, press **Load replay event** to seed the synthetic recruiting-to-terminated event, open it for the evidence diff and AI analysis, approve or reject a follow-up action, and read the result in the audit timeline. The inbox reads the replay namespace; live events are available through the API.
+Sign in and load the synthetic replay. Select the change in the queue; inspect exact before/after evidence separately from AI interpretation. Generate a verification request, or write one manually if AI is unavailable. Save, approve or reject the saved version, then copy or download it. Editing approved text requires fresh approval. The audit history preserves the request text and decision; **approved does not mean sent**. No external recipient or enterprise system is contacted.
 
-The same flow through the API:
+The review queue is synthetic; the monitored-studies drawer is live. Repeating replay sync explains when no new change was created. Live change-monitoring endpoints remain available for development, but are not a UI mode.
+
+For direct API access, export `API_ACCESS_TOKEN` securely and pass its bearer token with every request:
 
 ```bash
-curl -X POST 'http://localhost:8000/api/sync?mode=live'
-curl -X POST 'http://localhost:8000/api/sync?mode=replay'
-curl -X POST 'http://localhost:8000/api/sync?mode=replay'
-curl 'http://localhost:8000/api/changes?source=replay'
-curl 'http://localhost:8000/api/changes/1'
+curl -H "Authorization: Bearer $API_ACCESS_TOKEN" -X POST 'http://localhost:8000/api/sync?mode=replay'
+curl -H "Authorization: Bearer $API_ACCESS_TOKEN" 'http://localhost:8000/api/changes?source=replay'
 ```
 
 Use an actual ID from `event_ids` or the inbox rather than assuming it is `1`. The first live observation establishes a baseline, not an event. Later live syncs compare against the stored current snapshot. The first replay creates one Critical event; repeating it returns no new event IDs. Replay uses two explicitly synthetic fixtures, is labelled in every response, and lives in a separate namespace even if an NCT ID matches a live study. It is not historical registry evidence.
@@ -86,7 +99,7 @@ Use an actual ID from `event_ids` or the inbox rather than assuming it is `1`. T
 
 ## Request and data flow
 
-1. The Next.js watchlist requests `GET /api/studies`; FastAPI fetches the latest 50 AstraZeneca-led records from ClinicalTrials.gov. The browser never calls the registry directly.
+1. The browser calls same-origin Next.js endpoints using its demo session. The web server checks access and forwards allowed requests with a server-only token; FastAPI independently checks that token. `GET /api/studies` fetches the latest 50 AstraZeneca-led records from ClinicalTrials.gov. The browser never calls the registry directly.
 2. A manual `POST /api/sync` fetches the same source data, validates it, and extracts only the monitored fields. Invalid studies are logged, skipped, and counted.
 3. Canonicalisation sorts/deduplicates unordered collections and sorts JSON object keys. It preserves text and date precision. SHA-256 fingerprints that normalised content; timestamps and unmonitored metadata cannot create false change events.
 4. A PostgreSQL transaction locks each study, stores a unique snapshot per content hash, and compares against an explicit current-snapshot pointer. A first observation sets the baseline; an unchanged observation creates no event. A genuine return to an earlier state reuses its snapshot but still creates a new transition event.
@@ -107,7 +120,8 @@ Thresholds are named constants covered by tests, not clinical conclusions. Parti
 - The watchlist covers AstraZeneca as lead sponsor (`query.lead`), not collaborators, and only the 50 most recently updated studies; there is no pagination or scheduler.
 - Only observed transitions are known. There is no claim to registry history, and omitted studies are not treated as deletions.
 - Snapshot retrieval time is the first observation of that unique content. A later return to the same content reuses that snapshot; event creation time records the later transition.
-- PostgreSQL migrations, transactional persistence, and DB-backed replay acceptance remain unverified until the gated tests run with `TEST_DATABASE_URL`. Pure rules and API boundary tests do not substitute for them.
+- Database tests require `TEST_DATABASE_URL` and otherwise skip. They have been exercised against a disposable local PostgreSQL instance; this does not establish hosted deployment health.
 - The inbox and detail UI cover the replay namespace only; live events are reachable through the API but have no UI controls.
-- No authentication or infrastructure was added. The manual sync endpoint is intended for this local prototype, not unrestricted public production use.
+- The shared-password gate is demo access control, not enterprise identity: there are no individual identities, roles, per-user audit attribution, or production retention policies. Do not use patient data or confidential information.
+- AI prepares text from supplied evidence; it neither verifies the record against internal systems nor sends requests. Human review is required. Copying/downloading is an export, not proof of delivery.
 - This is analyst decision support, not a prediction of safety, efficacy, approval, or commercial impact.

@@ -4,12 +4,16 @@ export type StudyList = components["schemas"]["StudyList"];
 export type Study = components["schemas"]["Study"];
 export type ChangeSummary = components["schemas"]["ChangeSummary"];
 export type ChangeDetail = components["schemas"]["ChangeDetail"];
+export type Draft = components["schemas"]["VerificationDraftView"];
+export type DraftStatus = Draft["status"];
+export type DraftHistoryEntry =
+  components["schemas"]["VerificationDraftHistoryView"];
 export type Decision = components["schemas"]["DecisionRequest"]["status"];
 type SyncResult = components["schemas"]["SyncResult"];
 type Problem = components["schemas"]["Problem"];
 type UpstreamProblem = components["schemas"]["UpstreamProblem"];
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+const apiBaseUrl = "";
 
 export async function fetchStudies(): Promise<StudyList> {
   const response = await fetch(`${apiBaseUrl}/api/studies`).catch(() => {
@@ -48,6 +52,59 @@ export async function fetchChanges(): Promise<ChangeSummary[]> {
 
 export async function fetchChange(id: number): Promise<ChangeDetail> {
   const response = await fetch(`${apiBaseUrl}/api/changes/${id}`).catch(() => {
+    throw new Error("The monitoring API could not be reached.");
+  });
+  if (!response.ok) throw new Error(await problemMessage(response));
+  return response.json();
+}
+
+export async function generateDraft(id: number): Promise<Draft> {
+  const response = await fetch(`${apiBaseUrl}/api/changes/${id}/draft`, {
+    method: "POST",
+  }).catch(() => {
+    throw new Error("The monitoring API could not be reached.");
+  });
+  if (!response.ok) throw new Error(await problemMessage(response));
+  return response.json();
+}
+
+export async function saveDraft({
+  id,
+  body,
+  revision,
+}: {
+  id: number;
+  body: string;
+  revision: number;
+}): Promise<Draft> {
+  const response = await fetch(`${apiBaseUrl}/api/changes/${id}/draft`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, revision }),
+  }).catch(() => {
+    throw new Error("The monitoring API could not be reached.");
+  });
+  if (!response.ok) throw new Error(await problemMessage(response));
+  return response.json();
+}
+
+export async function decideDraft({
+  id,
+  status,
+  revision,
+}: {
+  id: number;
+  status: Decision;
+  revision: number;
+}): Promise<Draft> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/changes/${id}/draft/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, revision }),
+    },
+  ).catch(() => {
     throw new Error("The monitoring API could not be reached.");
   });
   if (!response.ok) throw new Error(await problemMessage(response));
