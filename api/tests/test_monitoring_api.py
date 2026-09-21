@@ -80,11 +80,21 @@ def test_live_sync_validates_skips_and_passes_only_valid_snapshots(
 def test_replay_is_labelled_and_never_calls_upstream(configured_boundary, monkeypatch):
     def save(engine, records, source):
         assert source == "replay"
-        assert [snapshot.overall_status for _, snapshot in records] == [
+        assert len(records) == 10
+        assert (
+            len(
+                {
+                    raw["protocolSection"]["identificationModule"]["nctId"]
+                    for raw, _ in records
+                }
+            )
+            == 5
+        )
+        assert [snapshot.overall_status for _, snapshot in records[:2]] == [
             "RECRUITING",
             "TERMINATED",
         ]
-        return [9]
+        return [9, 10, 11, 12, 13]
 
     monkeypatch.setattr(monitoring, "_save", save)
     with respx.mock():
@@ -92,7 +102,8 @@ def test_replay_is_labelled_and_never_calls_upstream(configured_boundary, monkey
     assert response.status_code == 200
     assert response.json()["label"] == monitoring.REPLAY_LABEL
     assert response.json()["source"] == "replay"
-    assert response.json()["event_ids"] == [9]
+    assert response.json()["event_ids"] == [9, 10, 11, 12, 13]
+    assert response.json()["processed"] == 10
 
 
 def test_database_failure_is_sanitised(configured_boundary, monkeypatch):

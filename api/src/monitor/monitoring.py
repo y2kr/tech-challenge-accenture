@@ -1,5 +1,6 @@
 import json
 import logging
+from copy import deepcopy
 from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.resources import files
@@ -33,7 +34,9 @@ DraftStatus = Literal["proposed", "approved", "rejected"]
 DraftOrigin = Literal["ai", "manual"]
 DraftEvent = Literal["generated", "edited", "approved", "rejected"]
 Decision = Literal["approved", "rejected"]
-REPLAY_LABEL = "Synthetic replay: recruiting to terminated; not live registry history"
+REPLAY_LABEL = (
+    "Synthetic replay: five study-change scenarios; not live registry history"
+)
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
@@ -163,6 +166,74 @@ def _label(source: Source) -> str:
     return REPLAY_LABEL if source == "replay" else "Live ClinicalTrials.gov observation"
 
 
+def _replay_studies() -> list[dict]:
+    baseline = json.loads(
+        files("monitor").joinpath("fixtures/recruiting.json").read_text()
+    )
+
+    def pair(nct_id: str, title: str) -> tuple[dict, dict]:
+        before = deepcopy(baseline)
+        after = deepcopy(baseline)
+        for study in (before, after):
+            identification = study["protocolSection"]["identificationModule"]
+            identification["nctId"] = nct_id
+            identification["briefTitle"] = title
+        after["protocolSection"]["statusModule"]["lastUpdatePostDateStruct"] = {
+            "date": "2025-02-01",
+            "type": "ACTUAL",
+        }
+        return before, after
+
+    status_before, status_after = pair(
+        "NCT90000001", "Synthetic recruitment status reconciliation"
+    )
+    status_after["protocolSection"]["statusModule"].update(
+        {
+            "overallStatus": "TERMINATED",
+            "whyStopped": "Synthetic replay: recruitment terminated after feasibility review.",
+        }
+    )
+
+    enrollment_before, enrollment_after = pair(
+        "NCT90000002", "Synthetic enrolment reconciliation"
+    )
+    enrollment_after["protocolSection"]["designModule"]["enrollmentInfo"]["count"] = 350
+
+    timeline_before, timeline_after = pair(
+        "NCT90000003", "Synthetic timeline reconciliation"
+    )
+    timeline_after["protocolSection"]["statusModule"]["primaryCompletionDateStruct"][
+        "date"
+    ] = "2026-02-15"
+
+    outcome_before, outcome_after = pair(
+        "NCT90000004", "Synthetic primary outcome reconciliation"
+    )
+    outcome_after["protocolSection"]["outcomesModule"]["primaryOutcomes"][0][
+        "measure"
+    ] = "Synthetic revised primary outcome"
+
+    location_before, location_after = pair(
+        "NCT90000005", "Synthetic site footprint reconciliation"
+    )
+    location_after["protocolSection"]["contactsLocationsModule"]["locations"] = [
+        location_after["protocolSection"]["contactsLocationsModule"]["locations"][1]
+    ]
+
+    return [
+        status_before,
+        status_after,
+        enrollment_before,
+        enrollment_after,
+        timeline_before,
+        timeline_after,
+        outcome_before,
+        outcome_after,
+        location_before,
+        location_after,
+    ]
+
+
 def _generate_ai_analysis(changes: list[FieldChange]) -> AIAnalysis | None:
     if not settings.openai_api_key:
         return None
@@ -266,7 +337,7 @@ def _save(
                 raw,
                 snapshot,
                 source,
-                baseline_only=source == "replay" and index == 0,
+                baseline_only=source == "replay" and index % 2 == 0,
             )
             if event is not None:
                 event_ids.append(event.id)
@@ -317,10 +388,7 @@ def _save(
 )
 async def sync_studies(engine: Database, mode: Source = "live") -> SyncResult:
     if mode == "replay":
-        raw_studies = [
-            json.loads(files("monitor").joinpath(f"fixtures/{name}.json").read_text())
-            for name in ("recruiting", "terminated")
-        ]
+        raw_studies = _replay_studies()
     else:
         raw_studies = (await fetch_lead_sponsor_studies())["studies"]
     records = []

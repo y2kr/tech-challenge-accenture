@@ -93,7 +93,7 @@ curl -H "Authorization: Bearer $API_ACCESS_TOKEN" -X POST 'http://localhost:8000
 curl -H "Authorization: Bearer $API_ACCESS_TOKEN" 'http://localhost:8000/api/changes?source=replay'
 ```
 
-Use an actual ID from `event_ids` or the inbox rather than assuming it is `1`. The first live observation establishes a baseline, not an event. Later live syncs compare against the stored current snapshot. The first replay creates one Critical event; repeating it returns no new event IDs. Replay uses two explicitly synthetic fixtures, is labelled in every response, and lives in a separate namespace even if an NCT ID matches a live study. It is not historical registry evidence.
+Use an actual ID from `event_ids` or the inbox rather than assuming it is `1`. The first live observation establishes a baseline, not an event. Later live syncs compare against the stored current snapshot. The first replay creates five study-change events across Critical, High, and Medium severity; repeating it returns no new event IDs. Replay derives five labelled synthetic scenarios from a fixture, keeps them in a separate namespace even if an NCT ID matches a live study, and does not represent registry history.
 
 `GET /api/changes` defaults to live events, ordered Critical → High → Medium → Low, then newest first. `source=replay` selects the replay inbox. `limit` defaults to 50 and is capped at 100. Detail responses include exact changed values, both normalised snapshots, hashes, retrieval timestamps, and source labels. Interactive API documentation is at `/docs`.
 

@@ -210,7 +210,7 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
             assert first.status_code == 200
             first_payload = first.json()
             assert first_payload["source"] == "replay"
-            assert len(first_payload["event_ids"]) == 1
+            assert len(first_payload["event_ids"]) == 5
 
             repeat = client.post("/api/sync", params={"mode": "replay"})
             assert repeat.status_code == 200
@@ -223,10 +223,14 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
             replay_changes = client.get("/api/changes", params={"source": "replay"})
             assert replay_changes.status_code == 200
             changes = replay_changes.json()
-            assert len(changes) == 1
-            assert changes[0]["source"] == "replay"
+            assert len(changes) == 5
+            assert {change["source"] for change in changes} == {"replay"}
+            assert {change["severity"] for change in changes} == {
+                "critical",
+                "high",
+                "medium",
+            }
             assert changes[0]["severity"] == "critical"
-            assert changes[0]["category"] == "multiple"
 
             missing = client.get("/api/changes/999999")
             assert missing.status_code == 404
@@ -272,7 +276,7 @@ def test_api_replay_flow_uses_database_dependency_override(sessions, monkeypatch
                 "created_at": decided["audit_timeline"][0]["created_at"],
             }
             assert session_count(sessions, AuditEntry) == 1
-            assert session_count(sessions, FollowUpAction) == 2
+            assert session_count(sessions, FollowUpAction) == 10
     finally:
         app.dependency_overrides.pop(database_engine, None)
 
